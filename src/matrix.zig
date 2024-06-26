@@ -20,6 +20,22 @@ pub fn Matrix(comptime n: u32, comptime m: u32, comptime t: type) type {
             }
         }
 
+        pub fn add_scalar(lhs: *@This(), scalar: t) void {
+            const scalar_mul = @as(@Vector(n, t), @splat(scalar));
+
+            for (&lhs.rows) |*l| {
+                l.* += scalar_mul;
+            }
+        }
+
+        pub fn sub_scalar(lhs: *@This(), scalar: t) void {
+            const scalar_vec = @as(@Vector(n, t), @splat(scalar));
+
+            for (&lhs.rows) |*l| {
+                l.* -= scalar_vec;
+            }
+        }
+
         pub fn mul_scalar(lhs: *@This(), scalar: t) void {
             const scalar_mul = @as(@Vector(n, t), @splat(scalar));
 
@@ -61,16 +77,28 @@ test "Matrix Sub" {
 
     var a = t.uniform(5);
     var b = t.uniform(9);
-
     const a_clone = a;
-    a.sub(&b);
-    b.sub(&a_clone);
 
+    a.sub(&b);
     assert(meta.eql(a, t.uniform(-4)));
+
+    b.sub(&a_clone);
     assert(meta.eql(b, t.uniform(4)));
 }
 
-test "Matrix Scalar Multiply + Divide" {
+test "Matrix Scalar Add + Sub" {
+    const t = Matrix(10, 10, f64);
+
+    var a = t.uniform(5);
+
+    a.add_scalar(5);
+    assert(meta.eql(a, t.uniform(10)));
+
+    a.sub_scalar(5);
+    assert(meta.eql(a, t.uniform(5)));
+}
+
+test "Matrix Scalar Mul + Div" {
     const t = Matrix(10, 10, f64);
 
     var a = t.uniform(5);

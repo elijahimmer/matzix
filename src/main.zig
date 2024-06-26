@@ -10,3 +10,7 @@ pub fn main() !void {
 
     try bw.flush();
 }
+
+test {
+    std.testing.refAllDecls(@This());
+}
