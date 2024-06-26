@@ -86,6 +86,24 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
         }
 
         /// a simple matrix multiplication via transposing the rhs array.
+        pub fn mul(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+            var result: Matrix(m, r, t) = undefined;
+
+            for (0..m) |idx| {
+                for (0..r) |jdx| {
+                    var sum: t = 0;
+
+                    for (0..n) |offset|
+                        sum += lhs.rows[idx][offset] * rhs.rows[offset][jdx];
+
+                    result.rows[idx][jdx] = sum;
+                }
+            }
+
+            return result;
+        }
+
+        /// a simple matrix multiplication via transposing the rhs array.
         pub fn mul_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
             const r_trans = rhs.transpose();
             var result: Matrix(m, r, t) = undefined;
@@ -198,6 +216,29 @@ test "Large Matrix" {
     a.add(b);
 
     assert(meta.eql(a, t.uniform(6)));
+}
+
+test "Multiply Basic" {
+    const m = 5;
+    const n = 6;
+    const r = 3;
+
+    const left = Matrix(m, n, i8);
+    const right = Matrix(n, r, i8);
+    const result = Matrix(m, r, i8);
+
+    const a = Matrix(m, m, i8).uniform(5);
+
+    const should_be_a = a.mul(m, @TypeOf(a).I);
+
+    assert(meta.eql(a, should_be_a));
+
+    const b = left.uniform(1);
+    const c = right.uniform(1);
+
+    const b_mul = b.mul(r, c);
+
+    assert(std.meta.eql(b_mul, result.uniform(n)));
 }
 
 test "Multiply Transpose" {
