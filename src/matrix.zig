@@ -1,6 +1,23 @@
-pub fn Matrix(comptime n: u32, comptime m: u32, comptime t: type) type {
+pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
     return struct {
-        rows: [n]@Vector(m, t),
+        rows: [m]@Vector(n, t),
+
+        fn multiplicative_identity() @This() {
+            comptime assert(m == n); // it has to be a square matrix
+
+            var rows = @as([m][n]t, .{.{0} ** n} ** m);
+
+            for (0..m) |i| {
+                rows[i][i] = 1;
+            }
+
+            return .{
+                .rows = @as([m]@Vector(n, t), rows),
+            };
+        }
+
+        pub const I = multiplicative_identity();
+        pub const O = uniform(0);
 
         pub fn uniform(scalar: t) @This() {
             return .{
@@ -51,16 +68,29 @@ pub fn Matrix(comptime n: u32, comptime m: u32, comptime t: type) type {
                 l.* /= scalar_vec;
             }
         }
+
+        pub fn transpose(self: *const @This()) Matrix(n, m, t) {
+            var new: Matrix(n, m, t) = undefined;
+
+            for (self.rows, 0..) |row_vec, j| {
+                const row = @as([n]t, row_vec);
+                for (row, 0..) |val, i| {
+                    new.rows[i][j] = val;
+                }
+            }
+
+            return new;
+        }
     };
 }
 
 test "Matrix Uniform" {
-    const a = Matrix(10, 10, f64).uniform(5);
+    const a = Matrix(10, 10, isize).uniform(5);
     assert(meta.eql(a.rows, .{.{5} ** 10} ** 10));
 }
 
 test "Matrix Add" {
-    const t = Matrix(10, 10, f64);
+    const t = Matrix(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(9);
@@ -73,7 +103,7 @@ test "Matrix Add" {
 }
 
 test "Matrix Sub" {
-    const t = Matrix(10, 10, f64);
+    const t = Matrix(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(9);
@@ -87,7 +117,7 @@ test "Matrix Sub" {
 }
 
 test "Matrix Scalar Add + Sub" {
-    const t = Matrix(10, 10, f64);
+    const t = Matrix(10, 10, isize);
 
     var a = t.uniform(5);
 
@@ -99,7 +129,7 @@ test "Matrix Scalar Add + Sub" {
 }
 
 test "Matrix Scalar Mul + Div" {
-    const t = Matrix(10, 10, f64);
+    const t = Matrix(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(5);
@@ -115,6 +145,26 @@ test "Matrix Scalar Mul + Div" {
 
     assert(meta.eql(a, t.uniform(5)));
     assert(meta.eql(a, b));
+}
+
+test "Matrix Transpose" {
+    const start = Matrix(4, 3, isize);
+    const result = Matrix(3, 4, isize);
+
+    const a = start{ .rows = .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 0, 0 } } };
+    const b = a.transpose();
+
+    assert(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
+}
+
+test "Matrix Multiplicative Identity" {
+    const t = Matrix(3, 3, isize);
+    assert(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
+}
+
+test "Matrix Additive Identity" {
+    const t = Matrix(3, 3, isize);
+    assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
 }
 
 test {
