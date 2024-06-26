@@ -63,7 +63,7 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
 
         /// turns every row of the matrix into the columns of the output matrix.
         /// takes a m by n matrix to a n by m matrix.
-        pub fn transpose(self: *const @This()) MatrixSIMD(n, m, t) {
+        pub fn transpose(self: @This()) MatrixSIMD(n, m, t) {
             var new: MatrixSIMD(n, m, t) = undefined;
 
             for (self.rows, 0..) |row_vec, j| {
@@ -72,6 +72,24 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
             }
 
             return new;
+        }
+
+        /// a simple matrix multiplication via transposing the rhs array.
+        pub fn mul_transpose(lhs: @This(), r: comptime_int, rhs: MatrixSIMD(n, r, t)) MatrixSIMD(m, r, t) {
+            const r_trans = rhs.transpose();
+            var result: MatrixSIMD(m, r, t) = undefined;
+
+            for (0..m) |idx| {
+                for (0..r) |jdx| {
+                    const mult = lhs.rows[idx] * r_trans.rows[jdx];
+
+                    const dot = @reduce(.Add, mult);
+
+                    result.rows[idx][jdx] = dot;
+                }
+            }
+
+            return result;
         }
     };
 }
@@ -167,6 +185,29 @@ test "Large Matrix" {
     a.add(b);
 
     assert(meta.eql(a, t.uniform(6)));
+}
+
+test "Multiply Transpose" {
+    const m = 5;
+    const n = 6;
+    const r = 3;
+
+    const left = MatrixSIMD(m, n, i8);
+    const right = MatrixSIMD(n, r, i8);
+    const result = MatrixSIMD(m, r, i8);
+
+    const a = MatrixSIMD(m, m, i8).uniform(5);
+
+    const should_be_a = a.mul_transpose(m, @TypeOf(a).I);
+
+    assert(meta.eql(a, should_be_a));
+
+    const b = left.uniform(1);
+    const c = right.uniform(1);
+
+    const b_mul = b.mul_transpose(r, c);
+
+    assert(std.meta.eql(b_mul, result.uniform(n)));
 }
 
 test {
