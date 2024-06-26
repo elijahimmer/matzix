@@ -1,4 +1,5 @@
-pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
+/// A matrix using SIMD vectors
+pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
     return struct {
         rows: [m]@Vector(n, t),
 
@@ -19,24 +20,28 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
         pub const I = multiplicative_identity();
         pub const O = uniform(0);
 
+        /// create a matrix with every value being `scalar`
         pub fn uniform(scalar: t) @This() {
             return .{
                 .rows = .{@as(@Vector(n, t), @splat(scalar))} ** m,
             };
         }
 
+        /// add two same dimension matrices together
         pub fn add(lhs: *@This(), rhs: *const @This()) void {
             for (&lhs.rows, rhs.rows) |*l, r| {
                 l.* += r;
             }
         }
 
+        /// take the rhs from the lhs matrices
         pub fn sub(lhs: *@This(), rhs: *const @This()) void {
             for (&lhs.rows, rhs.rows) |*l, r| {
                 l.* -= r;
             }
         }
 
+        /// add a scalar to every element of the matrix
         pub fn add_scalar(lhs: *@This(), scalar: t) void {
             const scalar_mul = @as(@Vector(n, t), @splat(scalar));
 
@@ -45,6 +50,7 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
             }
         }
 
+        /// subtract a scalar from every element of the matrix
         pub fn sub_scalar(lhs: *@This(), scalar: t) void {
             const scalar_vec = @as(@Vector(n, t), @splat(scalar));
 
@@ -53,6 +59,7 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
             }
         }
 
+        /// multiply every element of the matrix by a scalar
         pub fn mul_scalar(lhs: *@This(), scalar: t) void {
             const scalar_mul = @as(@Vector(n, t), @splat(scalar));
 
@@ -61,6 +68,7 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
             }
         }
 
+        /// divide every element of the matrix by a scalar.
         pub fn div_scalar(lhs: *@This(), scalar: t) void {
             const scalar_vec = @as(@Vector(n, t), @splat(scalar));
 
@@ -69,8 +77,10 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
             }
         }
 
-        pub fn transpose(self: *const @This()) Matrix(n, m, t) {
-            var new: Matrix(n, m, t) = undefined;
+        /// turns every row of the matrix into the columns of the output matrix.
+        /// takes a m by n matrix to a n by m matrix.
+        pub fn transpose(self: *const @This()) MatrixSIMD(n, m, t) {
+            var new: MatrixSIMD(n, m, t) = undefined;
 
             for (self.rows, 0..) |row_vec, j| {
                 const row = @as([n]t, row_vec);
@@ -84,13 +94,13 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
     };
 }
 
-test "Matrix Uniform" {
-    const a = Matrix(10, 10, isize).uniform(5);
+test "Uniform" {
+    const a = MatrixSIMD(10, 10, isize).uniform(5);
     assert(meta.eql(a.rows, .{.{5} ** 10} ** 10));
 }
 
-test "Matrix Add" {
-    const t = Matrix(10, 10, isize);
+test "Add" {
+    const t = MatrixSIMD(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(9);
@@ -102,8 +112,8 @@ test "Matrix Add" {
     assert(meta.eql(a, b));
 }
 
-test "Matrix Sub" {
-    const t = Matrix(10, 10, isize);
+test "Sub" {
+    const t = MatrixSIMD(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(9);
@@ -116,8 +126,8 @@ test "Matrix Sub" {
     assert(meta.eql(b, t.uniform(4)));
 }
 
-test "Matrix Scalar Add + Sub" {
-    const t = Matrix(10, 10, isize);
+test "Scalar Add + Sub" {
+    const t = MatrixSIMD(10, 10, isize);
 
     var a = t.uniform(5);
 
@@ -128,8 +138,8 @@ test "Matrix Scalar Add + Sub" {
     assert(meta.eql(a, t.uniform(5)));
 }
 
-test "Matrix Scalar Mul + Div" {
-    const t = Matrix(10, 10, isize);
+test "Scalar Mul + Div" {
+    const t = MatrixSIMD(10, 10, isize);
 
     var a = t.uniform(5);
     var b = t.uniform(5);
@@ -147,9 +157,9 @@ test "Matrix Scalar Mul + Div" {
     assert(meta.eql(a, b));
 }
 
-test "Matrix Transpose" {
-    const start = Matrix(4, 3, isize);
-    const result = Matrix(3, 4, isize);
+test "Transpose" {
+    const start = MatrixSIMD(4, 3, isize);
+    const result = MatrixSIMD(3, 4, isize);
 
     const a = start{ .rows = .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 0, 0 } } };
     const b = a.transpose();
@@ -157,13 +167,13 @@ test "Matrix Transpose" {
     assert(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
 }
 
-test "Matrix Multiplicative Identity" {
-    const t = Matrix(3, 3, isize);
+test "Multiplicative Identity" {
+    const t = MatrixSIMD(3, 3, isize);
     assert(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
 }
 
-test "Matrix Additive Identity" {
-    const t = Matrix(3, 3, isize);
+test "Additive Identity" {
+    const t = MatrixSIMD(3, 3, isize);
     assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
 }
 
