@@ -4,17 +4,14 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
         rows: [m][n]t,
 
         fn multiplicative_identity() @This() {
+            @setEvalBranchQuota(m * n * 2);
             comptime assert(m == n); // it has to be a square matrix
 
-            var rows = @as([m][n]t, .{.{0} ** n} ** m);
+            var new = uniform(0);
 
-            for (0..m) |i| {
-                rows[i][i] = 1;
-            }
+            for (0..m) |i| new.rows[i][i] = 1;
 
-            return .{
-                .rows = rows,
-            };
+            return new;
         }
 
         pub const I = multiplicative_identity();
@@ -28,20 +25,18 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
         }
 
         /// add two same dimension matrices together
-        pub fn add(lhs: *@This(), rhs: *const @This()) void {
+        pub fn add(lhs: *@This(), rhs: @This()) void {
             for (&lhs.rows, rhs.rows) |*l_row, r_row| {
-                for (l_row, r_row) |*l, r| {
+                for (l_row, r_row) |*l, r|
                     l.* += r;
-                }
             }
         }
 
         /// take the rhs from the lhs matrices
-        pub fn sub(lhs: *@This(), rhs: *const @This()) void {
+        pub fn sub(lhs: *@This(), rhs: @This()) void {
             for (&lhs.rows, rhs.rows) |*l_row, r_row| {
-                for (l_row, r_row) |*l, r| {
+                for (l_row, r_row) |*l, r|
                     l.* -= r;
-                }
             }
         }
 
@@ -79,13 +74,12 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
 
         /// turns every row of the matrix into the columns of the output matrix.
         /// takes a m by n matrix to a n by m matrix.
-        pub fn transpose(self: *const @This()) Matrix(n, m, t) {
+        pub fn transpose(self: @This()) Matrix(n, m, t) {
             var new: Matrix(n, m, t) = undefined;
 
             for (self.rows, 0..) |row, j| {
-                for (row, 0..) |val, i| {
+                for (row, 0..) |val, i|
                     new.rows[i][j] = val;
-                }
             }
 
             return new;
@@ -105,8 +99,8 @@ test "Add" {
     var b = t.uniform(9);
 
     const a_clone = a;
-    a.add(&b);
-    b.add(&a_clone);
+    a.add(b);
+    b.add(a_clone);
 
     assert(meta.eql(a, b));
 }
@@ -118,11 +112,11 @@ test "Sub" {
     var b = t.uniform(9);
     const a_clone = a;
 
-    a.sub(&b);
+    a.sub(b);
 
     assert(meta.eql(a, t.uniform(-4)));
 
-    b.sub(&a_clone);
+    b.sub(a_clone);
     assert(meta.eql(b, t.uniform(4)));
 }
 
@@ -175,6 +169,16 @@ test "Multiplicative Identity" {
 test "Additive Identity" {
     const t = Matrix(3, 3, isize);
     assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
+}
+
+test "Large Matrix" {
+    const t = Matrix(1_000, 1_000, i8); // that should be big enough
+    var a = t.uniform(1);
+    const b = t.uniform(5);
+
+    a.add(b);
+
+    assert(meta.eql(a, t.uniform(6)));
 }
 
 const std = @import("std");

@@ -6,15 +6,10 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
         fn multiplicative_identity() @This() {
             comptime assert(m == n); // it has to be a square matrix
 
-            var rows = @as([m][n]t, .{.{0} ** n} ** m);
+            var new = uniform(0);
+            for (0..m) |i| new.rows[i][i] = 1;
 
-            for (0..m) |i| {
-                rows[i][i] = 1;
-            }
-
-            return .{
-                .rows = @as([m]@Vector(n, t), rows),
-            };
+            return new;
         }
 
         pub const I = multiplicative_identity();
@@ -28,53 +23,42 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
         }
 
         /// add two same dimension matrices together
-        pub fn add(lhs: *@This(), rhs: *const @This()) void {
-            for (&lhs.rows, rhs.rows) |*l, r| {
+        pub fn add(lhs: *@This(), rhs: @This()) void {
+            for (&lhs.rows, rhs.rows) |*l, r|
                 l.* += r;
-            }
         }
 
         /// take the rhs from the lhs matrices
-        pub fn sub(lhs: *@This(), rhs: *const @This()) void {
-            for (&lhs.rows, rhs.rows) |*l, r| {
-                l.* -= r;
-            }
+        pub fn sub(lhs: *@This(), rhs: @This()) void {
+            for (&lhs.rows, rhs.rows) |*l, r| l.* -= r;
         }
 
         /// add a scalar to every element of the matrix
         pub fn add_scalar(lhs: *@This(), scalar: t) void {
             const scalar_mul = @as(@Vector(n, t), @splat(scalar));
 
-            for (&lhs.rows) |*l| {
-                l.* += scalar_mul;
-            }
+            for (&lhs.rows) |*l| l.* += scalar_mul;
         }
 
         /// subtract a scalar from every element of the matrix
         pub fn sub_scalar(lhs: *@This(), scalar: t) void {
             const scalar_vec = @as(@Vector(n, t), @splat(scalar));
 
-            for (&lhs.rows) |*l| {
-                l.* -= scalar_vec;
-            }
+            for (&lhs.rows) |*l| l.* -= scalar_vec;
         }
 
         /// multiply every element of the matrix by a scalar
         pub fn mul_scalar(lhs: *@This(), scalar: t) void {
             const scalar_mul = @as(@Vector(n, t), @splat(scalar));
 
-            for (&lhs.rows) |*l| {
-                l.* *= scalar_mul;
-            }
+            for (&lhs.rows) |*l| l.* *= scalar_mul;
         }
 
         /// divide every element of the matrix by a scalar.
         pub fn div_scalar(lhs: *@This(), scalar: t) void {
             const scalar_vec = @as(@Vector(n, t), @splat(scalar));
 
-            for (&lhs.rows) |*l| {
-                l.* /= scalar_vec;
-            }
+            for (&lhs.rows) |*l| l.* /= scalar_vec;
         }
 
         /// turns every row of the matrix into the columns of the output matrix.
@@ -84,9 +68,7 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
 
             for (self.rows, 0..) |row_vec, j| {
                 const row = @as([n]t, row_vec);
-                for (row, 0..) |val, i| {
-                    new.rows[i][j] = val;
-                }
+                for (row, 0..) |val, i| new.rows[i][j] = val;
             }
 
             return new;
@@ -106,8 +88,8 @@ test "Add" {
     var b = t.uniform(9);
 
     const a_clone = a;
-    a.add(&b);
-    b.add(&a_clone);
+    a.add(b);
+    b.add(a_clone);
 
     assert(meta.eql(a, b));
 }
@@ -119,10 +101,10 @@ test "Sub" {
     var b = t.uniform(9);
     const a_clone = a;
 
-    a.sub(&b);
+    a.sub(b);
     assert(meta.eql(a, t.uniform(-4)));
 
-    b.sub(&a_clone);
+    b.sub(a_clone);
     assert(meta.eql(b, t.uniform(4)));
 }
 
@@ -175,6 +157,16 @@ test "Multiplicative Identity" {
 test "Additive Identity" {
     const t = MatrixSIMD(3, 3, isize);
     assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
+}
+
+test "Large Matrix" {
+    const t = MatrixSIMD(1_000, 1_000, i8); // that should be big enough
+    var a = t.uniform(1);
+    const b = t.uniform(5);
+
+    a.add(b);
+
+    assert(meta.eql(a, t.uniform(6)));
 }
 
 test {
