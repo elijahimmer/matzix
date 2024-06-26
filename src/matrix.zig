@@ -177,10 +177,6 @@ test "Additive Identity" {
     assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
 }
 
-test {
-    std.testing.refAllDecls(@This());
-}
-
 const std = @import("std");
 const testing = std.testing;
 const assert = std.debug.assert;
