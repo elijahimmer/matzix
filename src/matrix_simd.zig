@@ -79,10 +79,9 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
             const r_trans = rhs.transpose();
             var result: MatrixSIMD(m, r, t) = undefined;
 
-            for (0..m) |idx| {
-                for (0..r) |jdx| {
-                    const mult = lhs.rows[idx] * r_trans.rows[jdx];
-
+            for (lhs.rows, 0..) |left, idx| {
+                for (r_trans.rows, 0..) |right, jdx| {
+                    const mult = left * right;
                     const dot = @reduce(.Add, mult);
 
                     result.rows[idx][jdx] = dot;
@@ -96,7 +95,7 @@ pub fn MatrixSIMD(comptime m: u32, comptime n: u32, comptime t: type) type {
 
 test "Uniform" {
     const a = MatrixSIMD(10, 10, isize).uniform(5);
-    assert(meta.eql(a.rows, .{.{5} ** 10} ** 10));
+    try expect(meta.eql(a.rows, .{.{5} ** 10} ** 10));
 }
 
 test "Add" {
@@ -109,7 +108,7 @@ test "Add" {
     a.add(b);
     b.add(a_clone);
 
-    assert(meta.eql(a, b));
+    try expect(meta.eql(a, b));
 }
 
 test "Sub" {
@@ -120,10 +119,10 @@ test "Sub" {
     const a_clone = a;
 
     a.sub(b);
-    assert(meta.eql(a, t.uniform(-4)));
+    try expect(meta.eql(a, t.uniform(-4)));
 
     b.sub(a_clone);
-    assert(meta.eql(b, t.uniform(4)));
+    try expect(meta.eql(b, t.uniform(4)));
 }
 
 test "Scalar Add + Sub" {
@@ -132,10 +131,10 @@ test "Scalar Add + Sub" {
     var a = t.uniform(5);
 
     a.add_scalar(5);
-    assert(meta.eql(a, t.uniform(10)));
+    try expect(meta.eql(a, t.uniform(10)));
 
     a.sub_scalar(5);
-    assert(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, t.uniform(5)));
 }
 
 test "Scalar Mul + Div" {
@@ -147,14 +146,14 @@ test "Scalar Mul + Div" {
     a.mul_scalar(5);
     b.div_scalar(5);
 
-    assert(meta.eql(a, t.uniform(25)));
-    assert(meta.eql(b, t.uniform(1)));
+    try expect(meta.eql(a, t.uniform(25)));
+    try expect(meta.eql(b, t.uniform(1)));
 
     a.div_scalar(5);
     b.mul_scalar(5);
 
-    assert(meta.eql(a, t.uniform(5)));
-    assert(meta.eql(a, b));
+    try expect(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, b));
 }
 
 test "Transpose" {
@@ -164,17 +163,17 @@ test "Transpose" {
     const a = start{ .rows = .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 0, 0 } } };
     const b = a.transpose();
 
-    assert(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
+    try expect(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
 }
 
 test "Multiplicative Identity" {
     const t = MatrixSIMD(3, 3, isize);
-    assert(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
+    try expect(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
 }
 
 test "Additive Identity" {
     const t = MatrixSIMD(3, 3, isize);
-    assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
+    try expect(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
 }
 
 test "Large Matrix" {
@@ -184,10 +183,10 @@ test "Large Matrix" {
 
     a.add(b);
 
-    assert(meta.eql(a, t.uniform(6)));
+    try expect(meta.eql(a, t.uniform(6)));
 }
 
-test "Multiply Transpose" {
+fn test_multiply(fun: anytype, fun2: anytype) !void {
     const m = 5;
     const n = 6;
     const r = 3;
@@ -198,16 +197,20 @@ test "Multiply Transpose" {
 
     const a = MatrixSIMD(m, m, i8).uniform(5);
 
-    const should_be_a = a.mul_transpose(m, @TypeOf(a).I);
+    const should_be_a = fun(a, m, @TypeOf(a).I);
 
-    assert(meta.eql(a, should_be_a));
+    try expect(meta.eql(a, should_be_a));
 
     const b = left.uniform(1);
     const c = right.uniform(1);
 
-    const b_mul = b.mul_transpose(r, c);
+    const b_mul = fun2(b, r, c);
 
-    assert(std.meta.eql(b_mul, result.uniform(n)));
+    try expect(std.meta.eql(b_mul, result.uniform(n)));
+}
+
+test "Multiply Transpose" {
+    try test_multiply(MatrixSIMD(5, 5, i8).mul_transpose, MatrixSIMD(5, 6, i8).mul_transpose);
 }
 
 test {
@@ -217,4 +220,5 @@ test {
 const std = @import("std");
 const testing = std.testing;
 const assert = std.debug.assert;
+const expect = std.testing.expect;
 const meta = std.meta;

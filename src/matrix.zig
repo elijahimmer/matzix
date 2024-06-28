@@ -89,12 +89,12 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
         pub fn mul(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
             var result: Matrix(m, r, t) = undefined;
 
-            for (0..m) |idx| {
+            for (lhs.rows, 0..) |left, idx| {
                 for (0..r) |jdx| {
                     var sum: t = 0;
 
                     for (0..n) |offset|
-                        sum += lhs.rows[idx][offset] * rhs.rows[offset][jdx];
+                        sum += left[offset] * rhs.rows[offset][jdx];
 
                     result.rows[idx][jdx] = sum;
                 }
@@ -108,12 +108,12 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
             const r_trans = rhs.transpose();
             var result: Matrix(m, r, t) = undefined;
 
-            for (0..m) |idx| {
-                for (0..r) |jdx| {
+            for (lhs.rows, 0..) |left, idx| {
+                for (r_trans.rows, 0..) |right, jdx| {
                     var sum: t = 0;
 
                     for (0..n) |offset|
-                        sum += lhs.rows[idx][offset] * r_trans.rows[jdx][offset];
+                        sum += left[offset] * right[offset];
 
                     result.rows[idx][jdx] = sum;
                 }
@@ -126,7 +126,7 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
 
 test "Uniform" {
     const a = Matrix(10, 10, isize).uniform(5);
-    assert(meta.eql(a.rows, .{.{5} ** 10} ** 10));
+    try expect(meta.eql(a.rows, .{.{5} ** 10} ** 10));
 }
 
 test "Add" {
@@ -139,7 +139,7 @@ test "Add" {
     a.add(b);
     b.add(a_clone);
 
-    assert(meta.eql(a, b));
+    try expect(meta.eql(a, b));
 }
 
 test "Sub" {
@@ -151,10 +151,10 @@ test "Sub" {
 
     a.sub(b);
 
-    assert(meta.eql(a, t.uniform(-4)));
+    try expect(meta.eql(a, t.uniform(-4)));
 
     b.sub(a_clone);
-    assert(meta.eql(b, t.uniform(4)));
+    try expect(meta.eql(b, t.uniform(4)));
 }
 
 test "Scalar Add + Sub" {
@@ -163,10 +163,10 @@ test "Scalar Add + Sub" {
     var a = t.uniform(5);
 
     a.add_scalar(5);
-    assert(meta.eql(a, t.uniform(10)));
+    try expect(meta.eql(a, t.uniform(10)));
 
     a.sub_scalar(5);
-    assert(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, t.uniform(5)));
 }
 
 test "Scalar Mul + Div" {
@@ -178,14 +178,14 @@ test "Scalar Mul + Div" {
     a.mul_scalar(5);
     b.div_scalar(5);
 
-    assert(meta.eql(a, t.uniform(25)));
-    assert(meta.eql(b, t.uniform(1)));
+    try expect(meta.eql(a, t.uniform(25)));
+    try expect(meta.eql(b, t.uniform(1)));
 
     a.div_scalar(5);
     b.mul_scalar(5);
 
-    assert(meta.eql(a, t.uniform(5)));
-    assert(meta.eql(a, b));
+    try expect(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, b));
 }
 
 test "Transpose" {
@@ -195,17 +195,17 @@ test "Transpose" {
     const a = start{ .rows = .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 0, 0 } } };
     const b = a.transpose();
 
-    assert(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
+    try expect(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
 }
 
 test "Multiplicative Identity" {
     const t = Matrix(3, 3, isize);
-    assert(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
+    try expect(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
 }
 
 test "Additive Identity" {
     const t = Matrix(3, 3, isize);
-    assert(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
+    try expect(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
 }
 
 test "Large Matrix" {
@@ -215,56 +215,42 @@ test "Large Matrix" {
 
     a.add(b);
 
-    assert(meta.eql(a, t.uniform(6)));
+    try expect(meta.eql(a, t.uniform(6)));
+}
+
+fn test_multiply(fun: anytype, fun2: anytype) !void {
+    const m = 5;
+    const n = 6;
+    const r = 3;
+
+    const left = Matrix(m, n, i8);
+    const right = Matrix(n, r, i8);
+    const result = Matrix(m, r, i8);
+
+    const a = Matrix(m, m, i8).uniform(5);
+
+    const should_be_a = fun(a, m, @TypeOf(a).I);
+
+    try expect(meta.eql(a, should_be_a));
+
+    const b = left.uniform(1);
+    const c = right.uniform(1);
+
+    const b_mul = fun2(b, r, c);
+
+    try expect(std.meta.eql(b_mul, result.uniform(n)));
 }
 
 test "Multiply Basic" {
-    const m = 5;
-    const n = 6;
-    const r = 3;
-
-    const left = Matrix(m, n, i8);
-    const right = Matrix(n, r, i8);
-    const result = Matrix(m, r, i8);
-
-    const a = Matrix(m, m, i8).uniform(5);
-
-    const should_be_a = a.mul(m, @TypeOf(a).I);
-
-    assert(meta.eql(a, should_be_a));
-
-    const b = left.uniform(1);
-    const c = right.uniform(1);
-
-    const b_mul = b.mul(r, c);
-
-    assert(std.meta.eql(b_mul, result.uniform(n)));
+    try test_multiply(Matrix(5, 5, i8).mul, Matrix(5, 6, i8).mul);
 }
 
 test "Multiply Transpose" {
-    const m = 5;
-    const n = 6;
-    const r = 3;
-
-    const left = Matrix(m, n, i8);
-    const right = Matrix(n, r, i8);
-    const result = Matrix(m, r, i8);
-
-    const a = Matrix(m, m, i8).uniform(5);
-
-    const should_be_a = a.mul_transpose(m, @TypeOf(a).I);
-
-    assert(meta.eql(a, should_be_a));
-
-    const b = left.uniform(1);
-    const c = right.uniform(1);
-
-    const b_mul = b.mul_transpose(r, c);
-
-    assert(std.meta.eql(b_mul, result.uniform(n)));
+    try test_multiply(Matrix(5, 5, i8).mul_transpose, Matrix(5, 6, i8).mul_transpose);
 }
 
 const std = @import("std");
 const testing = std.testing;
 const assert = std.debug.assert;
+const expect = std.testing.expect;
 const meta = std.meta;
