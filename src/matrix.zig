@@ -1,15 +1,16 @@
 /// A matrix
-pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
+pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
     return struct {
         rows: [m][n]t,
 
         fn multiplicative_identity() @This() {
             @setEvalBranchQuota(m * n * 2);
-            comptime assert(m == n); // it has to be a square matrix
 
-            var new = uniform(0);
+            var new: @This() = undefined;
 
-            for (0..m) |i| new.rows[i][i] = 1;
+            for (0..m) |i| {
+                for (0..n) |j| new.rows[i][j] = @as(t, @intFromBool(i == j));
+            }
 
             return new;
         }
@@ -19,9 +20,11 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
 
         /// create a matrix with every value being `scalar`
         pub fn uniform(scalar: t) @This() {
-            return .{
-                .rows = .{.{scalar} ** n} ** m,
-            };
+            var res: @This() = undefined;
+
+            @memset(@as(*[m * n]t, @ptrCast(&res.rows)), scalar);
+
+            return res;
         }
 
         /// add two same dimension matrices together
@@ -121,6 +124,43 @@ pub fn Matrix(comptime m: u32, comptime n: u32, comptime t: type) type {
 
             return result;
         }
+
+        pub fn mul_simd(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+            var result: Matrix(m, r, t) = undefined;
+
+            for (0..r) |jdx| {
+                var right: @Vector(n, t) = undefined;
+
+                for (0..n) |idx| {
+                    right[idx] = rhs.rows[idx][jdx];
+                }
+
+                for (0..m) |idx| {
+                    const left: @Vector(n, t) = lhs.rows[idx];
+
+                    result.rows[idx][jdx] = @reduce(.Add, left * right);
+                }
+            }
+
+            return result;
+        }
+
+        // waiting for https://github.com/ziglang/zig/issues/20453
+        //pub fn mul_simd_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+        //    const r_trans = rhs.transpose();
+        //    var result: Matrix(m, r, t) = undefined;
+
+        //    const l_vec: [m]@Vector(n, t) = lhs.rows;
+        //    const r_vec: [r]@Vector(n, t) = r_trans.rows;
+
+        //    for (l_vec, 0..) |left, idx| {
+        //        for (r_vec, 0..) |right, jdx| {
+        //            result.rows[idx][jdx] = @reduce(.Add, left * right);
+        //        }
+        //    }
+
+        //    return result;
+        //}
     };
 }
 
@@ -248,6 +288,14 @@ test "Multiply Basic" {
 test "Multiply Transpose" {
     try test_multiply(Matrix(5, 5, i8).mul_transpose, Matrix(5, 6, i8).mul_transpose);
 }
+
+test "Multiply SIMD" {
+    try test_multiply(Matrix(5, 5, i8).mul_simd, Matrix(5, 6, i8).mul_simd);
+}
+
+//test "Multiply SIMD Transpose" {
+//    try test_multiply(Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 6, i8).mul_simd_transpose);
+//}
 
 const std = @import("std");
 const testing = std.testing;

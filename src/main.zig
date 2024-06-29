@@ -6,12 +6,20 @@ pub fn main() !void {
 
     const stdout = bw.writer();
 
-    const t = matzix.Matrix(2, 2, isize);
-    const a = t{ .rows = .{ .{ 1, 2 }, .{ 3, 4 } } };
-    const b = t{ .rows = .{ .{ 2, -1 }, .{ -5, 3 } } };
-    const res = a.mul(2, b);
+    var gpa = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
+    defer _ = gpa.deinit();
+    //var arena = std.heap.ArenaAllocator.init(gpa.allocator());
+    //defer arena.deinit();
+    const alloc = gpa.allocator();
 
-    try stdout.print("mul: {}", .{res});
+    const t = Matrix(1_000, 1_000, f64);
+
+    const large_matrix = try alloc.create(t);
+    defer alloc.destroy(large_matrix);
+
+    large_matrix.* = t.uniform(0);
+
+    try stdout.print("{}", .{@sizeOf(t)});
 
     try bw.flush();
 }
@@ -22,3 +30,4 @@ test {
 
 const std = @import("std");
 const matzix = @import("root.zig");
+const Matrix = matzix.Matrix;
