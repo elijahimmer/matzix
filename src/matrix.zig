@@ -135,8 +135,8 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
                     right[idx] = rhs.rows[idx][jdx];
                 }
 
-                for (0..m) |idx| {
-                    const left: @Vector(n, t) = lhs.rows[idx];
+                for (lhs.rows, 0..m) |l_normal, idx| {
+                    const left: @Vector(n, t) = l_normal;
 
                     result.rows[idx][jdx] = @reduce(.Add, left * right);
                 }
@@ -145,22 +145,20 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
             return result;
         }
 
-        // waiting for https://github.com/ziglang/zig/issues/20453
-        //pub fn mul_simd_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
-        //    const r_trans = rhs.transpose();
-        //    var result: Matrix(m, r, t) = undefined;
+        pub fn mul_simd_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+            const rhs_trans = rhs.transpose();
+            var result: Matrix(m, r, t) = undefined;
 
-        //    const l_vec: [m]@Vector(n, t) = lhs.rows;
-        //    const r_vec: [r]@Vector(n, t) = r_trans.rows;
+            for (lhs.rows, 0..) |l_normal, idx| {
+                const left: @Vector(n, t) = l_normal;
+                for (rhs_trans.rows, 0..) |r_normal, jdx| {
+                    const right: @Vector(n, t) = r_normal;
+                    result.rows[idx][jdx] = @reduce(.Add, left * right);
+                }
+            }
 
-        //    for (l_vec, 0..) |left, idx| {
-        //        for (r_vec, 0..) |right, jdx| {
-        //            result.rows[idx][jdx] = @reduce(.Add, left * right);
-        //        }
-        //    }
-
-        //    return result;
-        //}
+            return result;
+        }
     };
 }
 
@@ -293,9 +291,9 @@ test "Multiply SIMD" {
     try test_multiply(Matrix(5, 5, i8).mul_simd, Matrix(5, 6, i8).mul_simd);
 }
 
-//test "Multiply SIMD Transpose" {
-//    try test_multiply(Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 6, i8).mul_simd_transpose);
-//}
+test "Multiply SIMD Transpose" {
+    try test_multiply(Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 6, i8).mul_simd_transpose);
+}
 
 const std = @import("std");
 const testing = std.testing;
