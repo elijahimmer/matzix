@@ -256,11 +256,7 @@ test "Large Matrix" {
     try expect(meta.eql(a, t.uniform(6)));
 }
 
-fn test_multiply(fun: anytype, fun2: anytype) !void {
-    const m = 5;
-    const n = 6;
-    const r = 3;
-
+fn test_multiply(m: usize, n: usize, r: usize, fun: anytype, fun2: anytype) !void {
     const left = Matrix(m, n, i8);
     const right = Matrix(n, r, i8);
     const result = Matrix(m, r, i8);
@@ -280,19 +276,19 @@ fn test_multiply(fun: anytype, fun2: anytype) !void {
 }
 
 test "Multiply Basic" {
-    try test_multiply(Matrix(5, 5, i8).mul, Matrix(5, 6, i8).mul);
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul, Matrix(5, 6, i8).mul);
 }
 
 test "Multiply Transpose" {
-    try test_multiply(Matrix(5, 5, i8).mul_transpose, Matrix(5, 6, i8).mul_transpose);
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_transpose, Matrix(5, 6, i8).mul_transpose);
 }
 
 test "Multiply SIMD" {
-    try test_multiply(Matrix(5, 5, i8).mul_simd, Matrix(5, 6, i8).mul_simd);
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd, Matrix(5, 6, i8).mul_simd);
 }
 
 test "Multiply SIMD Transpose" {
-    try test_multiply(Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 6, i8).mul_simd_transpose);
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 6, i8).mul_simd_transpose);
 }
 
 const std = @import("std");
