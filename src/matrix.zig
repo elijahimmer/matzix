@@ -1,9 +1,11 @@
+const cache_size = 64;
+
 /// A matrix
 pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
     return struct {
         rows: [m][n]t,
 
-        pub fn multiplicative_identity(alloc: Allocator) Allocator.Error!*@This() {
+        pub fn multiplicative_identity(alloc: Allocator) Allocator.Error!*align(cache_size) @This() {
             var new = try @This().uniform(alloc, 0);
 
             for (0..m) |i| {
@@ -13,24 +15,21 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
             return new;
         }
 
-        fn clone(self: @This(), alloc: Allocator) Allocator.Error!*@This() {
-            const result = try alloc.create(@This());
+        fn clone(self: @This(), alloc: Allocator) Allocator.Error!*align(cache_size) @This() {
+            const result = &(try alloc.alignedAlloc(@This(), cache_size, 1))[0];
 
             result.* = self;
 
             return result;
         }
 
-        //pub const I = multiplicative_identity();
-        //pub const O = uniform(0);
-
         /// create a matrix with every value being `scalar`
-        pub fn uniform(alloc: Allocator, scalar: t) Allocator.Error!*@This() {
-            const res = try alloc.create(@This());
+        pub fn uniform(alloc: Allocator, scalar: t) Allocator.Error!*align(cache_size) @This() {
+            const result = &(try alloc.alignedAlloc(@This(), cache_size, 1))[0];
 
-            @memset(@as(*[m * n]t, @ptrCast(&res.rows)), scalar);
+            @memset(@as(*[m * n]t, @ptrCast(&result.rows)), scalar);
 
-            return res;
+            return result;
         }
 
         /// add two same dimension matrices together
@@ -153,6 +152,7 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
 
         pub fn mul_simd_transpose(alloc: Allocator, lhs: *const @This(), r: comptime_int, rhs: *const Matrix(n, r, t)) Allocator.Error!*Matrix(m, r, t) {
             const rhs_trans = try rhs.transpose(alloc);
+            defer alloc.destroy(rhs_trans);
             var result = try alloc.create(Matrix(m, r, t));
 
             for (lhs.rows, 0..) |l_normal, idx| {
@@ -273,7 +273,7 @@ test "Large Matrix" {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    const t = Matrix(1_000, 1_000, i8); // that should be big enough
+    const t = Matrix(1_024, 1_024, i8); // that should be big enough
 
     const a = try t.uniform(alloc, 1);
     const b = try t.uniform(alloc, 5);
@@ -295,7 +295,7 @@ fn test_multiply(m: comptime_int, n: comptime_int, r: comptime_int, fun: anytype
 
     const should_be_a = try fun(alloc, a, m, I);
 
-    try expect(meta.eql(a, should_be_a));
+    try expect(meta.eql(a.*, should_be_a.*));
 
     const b = try Matrix(m, n, i8).uniform(alloc, 1);
     const c = try Matrix(n, r, i8).uniform(alloc, 1);
@@ -303,24 +303,24 @@ fn test_multiply(m: comptime_int, n: comptime_int, r: comptime_int, fun: anytype
     const b_mul = try fun2(alloc, b, r, c);
     const expected = try Matrix(m, r, i8).uniform(alloc, n);
 
-    try expect(meta.eql(b_mul, expected));
+    try expect(meta.eql(b_mul.*, expected.*));
 }
 
-//test "Multiply Basic" {
-//    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul, Matrix(5, 5, i8).mul);
-//}
-//
-//test "Multiply Transpose" {
-//    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_transpose, Matrix(5, 5, i8).mul_transpose);
-//}
-//
-//test "Multiply SIMD" {
-//    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd, Matrix(5, 5, i8).mul_simd);
-//}
-//
-//test "Multiply SIMD Transpose" {
-//    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 5, i8).mul_simd_transpose);
-//}
+test "Multiply Basic" {
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul, Matrix(5, 5, i8).mul);
+}
+
+test "Multiply Transpose" {
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_transpose, Matrix(5, 5, i8).mul_transpose);
+}
+
+test "Multiply SIMD" {
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd, Matrix(5, 5, i8).mul_simd);
+}
+
+test "Multiply SIMD Transpose" {
+    try test_multiply(5, 5, 6, Matrix(5, 5, i8).mul_simd_transpose, Matrix(5, 5, i8).mul_simd_transpose);
+}
 
 const std = @import("std");
 const testing = std.testing;
