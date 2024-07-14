@@ -12,12 +12,10 @@ pub fn main() !void {
     //defer arena.deinit();
     const alloc = gpa.allocator();
 
-    const t = Matrix(1_000, 1_000, f64);
+    const t = Matrix(10_000, 10_000, f64);
 
     const large_matrix = try alloc.create(t);
     defer alloc.destroy(large_matrix);
-
-    large_matrix.* = t.uniform(0);
 
     try stdout.print("{}", .{@sizeOf(t)});
 

@@ -3,10 +3,10 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
     return struct {
         rows: [m][n]t,
 
-        fn multiplicative_identity() @This() {
+        pub fn multiplicative_identity(alloc: Allocator) Allocator.Error!@This() {
             @setEvalBranchQuota(m * n * 2);
 
-            var new: @This() = undefined;
+            var new = @This().uniform(alloc, 0);
 
             for (0..m) |i| {
                 for (0..n) |j| new.rows[i][j] = @as(t, @intFromBool(i == j));
@@ -15,12 +15,20 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
             return new;
         }
 
-        pub const I = multiplicative_identity();
-        pub const O = uniform(0);
+        fn clone(self: @This(), alloc: Allocator) Allocator.Error!@This() {
+            const result = alloc.create(@This());
+
+            result.* = self;
+
+            return result;
+        }
+
+        //pub const I = multiplicative_identity();
+        //pub const O = uniform(0);
 
         /// create a matrix with every value being `scalar`
-        pub fn uniform(scalar: t) @This() {
-            var res: @This() = undefined;
+        pub fn uniform(alloc: Allocator, scalar: t) Allocator.Error!@This() {
+            var res = alloc.create(@This());
 
             @memset(@as(*[m * n]t, @ptrCast(&res.rows)), scalar);
 
@@ -77,8 +85,8 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
 
         /// turns every row of the matrix into the columns of the output matrix.
         /// takes a m by n matrix to a n by m matrix.
-        pub fn transpose(self: @This()) Matrix(n, m, t) {
-            var new: Matrix(n, m, t) = undefined;
+        pub fn transpose(self: @This(), alloc: Allocator) Allocator.Error!Matrix(n, m, t) {
+            var new = alloc.create(Matrix(n, m, t));
 
             for (self.rows, 0..) |row, j| {
                 for (row, 0..) |val, i|
@@ -89,8 +97,8 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
         }
 
         /// a simple matrix multiplication via transposing the rhs array.
-        pub fn mul(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
-            var result: Matrix(m, r, t) = undefined;
+        pub fn mul(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Allocator.Error!*Matrix(m, r, t) {
+            var result = lhs.alloc.create(Matrix(m, r, t));
 
             for (lhs.rows, 0..) |left, idx| {
                 for (0..r) |jdx| {
@@ -107,9 +115,9 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
         }
 
         /// a simple matrix multiplication via transposing the rhs array.
-        pub fn mul_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+        pub fn mul_transpose(alloc: Allocator, lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Allocator.Error!*Matrix(m, r, t) {
             const r_trans = rhs.transpose();
-            var result: Matrix(m, r, t) = undefined;
+            var result = alloc.create(Matrix(m, r, t));
 
             for (lhs.rows, 0..) |left, idx| {
                 for (r_trans.rows, 0..) |right, jdx| {
@@ -125,8 +133,8 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
             return result;
         }
 
-        pub fn mul_simd(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
-            var result: Matrix(m, r, t) = undefined;
+        pub fn mul_simd(alloc: Allocator, lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Allocator.Error!*Matrix(m, r, t) {
+            var result = alloc.create(Matrix(m, r, t));
 
             for (0..r) |jdx| {
                 var right: @Vector(n, t) = undefined;
@@ -145,9 +153,9 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
             return result;
         }
 
-        pub fn mul_simd_transpose(lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Matrix(m, r, t) {
+        pub fn mul_simd_transpose(alloc: Allocator, lhs: @This(), r: comptime_int, rhs: Matrix(n, r, t)) Allocator.Error!*Matrix(m, r, t) {
             const rhs_trans = rhs.transpose();
-            var result: Matrix(m, r, t) = undefined;
+            var result = alloc.create(Matrix(m, r, t));
 
             for (lhs.rows, 0..) |l_normal, idx| {
                 const left: @Vector(n, t) = l_normal;
@@ -163,17 +171,17 @@ pub fn Matrix(comptime m: usize, comptime n: usize, comptime t: type) type {
 }
 
 test "Uniform" {
-    const a = Matrix(10, 10, isize).uniform(5);
+    const a = try Matrix(10, 10, isize).uniform(testing.allocator, 5);
     try expect(meta.eql(a.rows, .{.{5} ** 10} ** 10));
 }
 
 test "Add" {
     const t = Matrix(10, 10, isize);
 
-    var a = t.uniform(5);
-    var b = t.uniform(9);
+    var a = try t.uniform(testing.allocator, 5);
+    var b = try t.uniform(testing.allocator, 9);
 
-    const a_clone = a;
+    const a_clone = try a.clone(testing.allocator);
     a.add(b);
     b.add(a_clone);
 
@@ -183,46 +191,46 @@ test "Add" {
 test "Sub" {
     const t = Matrix(10, 10, isize);
 
-    var a = t.uniform(5);
-    var b = t.uniform(9);
-    const a_clone = a;
+    var a = try t.uniform(testing.allocator, 5);
+    var b = try t.uniform(testing.allocator, 9);
+    const a_clone = try a.clone(testing.allocator);
 
     a.sub(b);
 
-    try expect(meta.eql(a, t.uniform(-4)));
+    try expect(meta.eql(a, try t.uniform(testing.allocator, -4)));
 
     b.sub(a_clone);
-    try expect(meta.eql(b, t.uniform(4)));
+    try expect(meta.eql(b, try t.uniform(testing.allocator, 4)));
 }
 
 test "Scalar Add + Sub" {
     const t = Matrix(10, 10, isize);
 
-    var a = t.uniform(5);
+    var a = try t.uniform(testing.allocator, 5);
 
     a.add_scalar(5);
-    try expect(meta.eql(a, t.uniform(10)));
+    try expect(meta.eql(a, try t.uniform(testing.allocator, 10)));
 
     a.sub_scalar(5);
-    try expect(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, try t.uniform(testing.allocator, 5)));
 }
 
 test "Scalar Mul + Div" {
     const t = Matrix(10, 10, isize);
 
-    var a = t.uniform(5);
-    var b = t.uniform(5);
+    var a = try t.uniform(testing.allocator, 5);
+    var b = try t.uniform(testing.allocator, 5);
 
     a.mul_scalar(5);
     b.div_scalar(5);
 
-    try expect(meta.eql(a, t.uniform(25)));
-    try expect(meta.eql(b, t.uniform(1)));
+    try expect(meta.eql(a, try t.uniform(testing.allocator, 25)));
+    try expect(meta.eql(b, try t.uniform(testing.allocator, 5)));
 
     a.div_scalar(5);
     b.mul_scalar(5);
 
-    try expect(meta.eql(a, t.uniform(5)));
+    try expect(meta.eql(a, try t.uniform(testing.allocator, 5)));
     try expect(meta.eql(a, b));
 }
 
@@ -231,29 +239,32 @@ test "Transpose" {
     const result = Matrix(3, 4, isize);
 
     const a = start{ .rows = .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 0, 0 } } };
-    const b = a.transpose();
+    const b = try a.transpose(testing.allocator);
+    defer testing.allocator.free(b);
 
     try expect(meta.eql(b, result{ .rows = .{ .{ 1, 0, 0, 0 }, .{ 0, 1, 0, 0 }, .{ 0, 0, 1, 0 } } }));
 }
 
 test "Multiplicative Identity" {
     const t = Matrix(3, 3, isize);
-    try expect(meta.eql(t.I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
-}
-
-test "Additive Identity" {
-    const t = Matrix(3, 3, isize);
-    try expect(meta.eql(t.O.rows, .{ .{ 0, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 0, 0 } }));
+    const I = try t.multiplicative_identity(testing.allocator);
+    defer testing.allocator.free(I);
+    try expect(meta.eql(I.rows, .{ .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 } }));
 }
 
 test "Large Matrix" {
     const t = Matrix(1_000, 1_000, i8); // that should be big enough
-    var a = t.uniform(1);
-    const b = t.uniform(5);
+    var a = try t.uniform(testing.allocator, 1);
+    defer testing.allocator.free(a);
+    const b = try t.uniform(testing.allocator, 5);
+    defer testing.allocator.free(b);
 
     a.add(b);
 
-    try expect(meta.eql(a, t.uniform(6)));
+    const c = t.uniform(testing.allocator, 6);
+    defer testing.allocator.free(c);
+
+    try expect(meta.eql(a, c));
 }
 
 fn test_multiply(m: usize, n: usize, r: usize, fun: anytype, fun2: anytype) !void {
@@ -296,3 +307,4 @@ const testing = std.testing;
 const assert = std.debug.assert;
 const expect = std.testing.expect;
 const meta = std.meta;
+const Allocator = std.mem.Allocator;
